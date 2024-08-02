@@ -1,0 +1,29 @@
+#!/bin/sh
+set -e
+
+# Define the path to the desktop file
+DESKTOP_FILE="/usr/share/applications/sm.puri.Squeekboard.desktop"
+
+# Check if the desktop file exists
+if [ -f "$DESKTOP_FILE" ]; then
+    # Backup the original file
+    cp "$DESKTOP_FILE" "$DESKTOP_FILE.bak"
+
+    # Remove the specified lines
+    sed -i '/^X-GNOME-Autostart-Phase=Panel/d' "$DESKTOP_FILE"
+    sed -i '/^X-GNOME-Autostart-Notify=true/d' "$DESKTOP_FILE"
+    sed -i '/^X-Phosh-UsesFeedback=true/d' "$DESKTOP_FILE"
+
+    # Replace the Exec line
+    sed -i 's|^Exec=/usr/bin/squeekboard|Exec=/usr/bin/wvkbd|' "$DESKTOP_FILE"
+else
+    echo "Warning: $DESKTOP_FILE not found."
+fi
+
+# Notify user
+echo "Desktop file modified."
+
+systemctl enable --now wvkbd-dbus.service
+systemctl daemon-reload
+
+echo "Enabled Systemd Service"

@@ -1,0 +1,11 @@
+[Unit]
+Description: Dbus Service for wvkbd
+After=graphical.target
+
+[Service]
+ExecStart=/usr/bin/wvkbd-dbus
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+
