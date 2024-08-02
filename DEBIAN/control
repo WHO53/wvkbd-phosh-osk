@@ -1,8 +1,0 @@
-Package: wvkbd-phosh-osk
-Version: 1.0
-Section: utils
-Priority: Optional
-Architecture: arm64
-Depends: squeekboard, wvkbd
-Maintainer: WHO53 <notwho53@gmail.com>
-Description: Enable bottom bar toggle for wvkbd on phosh
