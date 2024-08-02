@@ -19,8 +19,10 @@ static pid_t find_wvkbd_pid() {
     struct dirent *ent;
     char path[PATH_MAX];
     char line[256];
-    pid_t pid = -1;
-
+    pid_t pids[10]; // Array to store PIDs (adjust size as needed)
+    int count = 0;
+    pid_t min_pid = -1;
+    
     if ((dir = opendir("/proc")) != NULL) {
         while ((ent = readdir(dir)) != NULL) {
             if (ent->d_type == DT_DIR) {
@@ -31,10 +33,10 @@ static pid_t find_wvkbd_pid() {
                     FILE *fp = fopen(path, "r");
                     if (fp) {
                         if (fgets(line, sizeof(line), fp) != NULL) {
-                            if (strncmp(line, "wvkbd", 5) == 0) {
-                                pid = (pid_t)lpid;
-                                fclose(fp);
-                                break;
+                            if (strncmp(line, "wvkbd-mobintl", 13) == 0) {
+                                if (count < sizeof(pids)/sizeof(pids[0])) {
+                                    pids[count++] = (pid_t)lpid;
+                                }
                             }
                         }
                         fclose(fp);
@@ -44,7 +46,30 @@ static pid_t find_wvkbd_pid() {
         }
         closedir(dir);
     }
-    return pid;
+
+    if (count > 1) {
+        // Find the smallest PID
+        min_pid = pids[0];
+        for (int i = 1; i < count; i++) {
+            if (pids[i] < min_pid) {
+                min_pid = pids[i];
+            }
+        }
+
+        // Kill the smallest PID
+        kill(min_pid, SIGKILL);
+
+        // Find the remaining PID to send the signal
+        for (int i = 0; i < count; i++) {
+            if (pids[i] != min_pid) {
+                return pids[i]; // Return the remaining PID
+            }
+        }
+    } else if (count == 1) {
+        return pids[0]; // Return the single PID found
+    }
+
+    return -1; // No suitable PID found
 }
 
 // Function to send SIGRTMIN to wvkbd
@@ -52,9 +77,9 @@ static void send_signal_to_wvkbd() {
     pid_t pid = find_wvkbd_pid();
     if (pid > 0) {
         kill(pid, SIGRTMIN);
-        g_print("Sent SIGRTMIN to wvkbd (PID: %d)\n", pid);
+        g_print("Sent SIGRTMIN to wvkbd-mobintl (PID: %d)\n", pid);
     } else {
-        g_print("wvkbd process not found\n");
+        g_print("wvkbd-mobintl process not found\n");
     }
 }
 
