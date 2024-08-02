@@ -73,11 +73,12 @@ static pid_t find_wvkbd_pid() {
 }
 
 // Function to send SIGRTMIN to wvkbd
-static void send_signal_to_wvkbd() {
+static void send_signal_to_wvkbd(gboolean visible) {
     pid_t pid = find_wvkbd_pid();
     if (pid > 0) {
-        kill(pid, SIGRTMIN);
-        g_print("Sent SIGRTMIN to wvkbd-mobintl (PID: %d)\n", pid);
+        int sig = visible ? SIGUSR2 : SIGUSR1;
+        kill(pid, sig);
+        g_print("Sent %s to wvkbd-mobintl (PID: %d)\n", visible ? "SIGUSR2" : "SIGUSR1", pid);
     } else {
         g_print("wvkbd-mobintl process not found\n");
     }
@@ -104,7 +105,7 @@ static void handle_method_call(GDBusConnection       *connection,
             g_print("Setting OSK visibility to: %s\n", visible ? "true" : "false");
 
             // Send signal to wvkbd
-            send_signal_to_wvkbd();
+            send_signal_to_wvkbd(visible);
 
             // Emit the PropertiesChanged signal
             GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE_ARRAY);
