@@ -109,6 +109,7 @@ static void handle_method_call(GDBusConnection       *connection,
                                GVariant              *parameters,
                                GDBusMethodInvocation *invocation,
                                gpointer               user_data) {
+    g_print("Received method call: %s\n", method_name):
     OSKData *data = (OSKData *)user_data;
 
     if (g_strcmp0(method_name, "SetVisible") == 0) {
@@ -161,6 +162,7 @@ static gboolean set_property(GDBusConnection  *connection,
 }
 
 static void set_visible(OSKData *data, gboolean visible) {
+    g_print("set_visible called with value: %d\n", visible);
     if (data->visible != visible) {
         data->visible = visible;
         send_signal_to_wvkbd(visible);
@@ -189,6 +191,9 @@ static void set_visible(OSKData *data, gboolean visible) {
         }
 
         g_variant_builder_unref(builder);
+        g_print("Emitted PropertiesChanged signal for Visible property\n");
+    } else {
+        g_print("Visibility unchanged, not emitting signal\n");
     }
 }
 
@@ -228,6 +233,7 @@ static const GDBusInterfaceVTable interface_vtable = {
 static void on_bus_acquired(GDBusConnection *connection,
                             const gchar     *name,
                             gpointer         user_data) {
+    g_print("Acquired the name %s on the session bus\n", name);
     OSKData *data = g_new0(OSKData, 1);
     data->connection = connection;
     data->visible = FALSE;  // Initially not visible
@@ -262,7 +268,10 @@ int main(void) {
                               NULL,
                               NULL);
 
+    g_print("Entering main loop...\n");
     g_main_loop_run(loop);
+
+    g_print("Exiting...\n");
 
     g_bus_unown_name(owner_id);
     g_main_loop_unref(loop);
