@@ -13,6 +13,23 @@ typedef struct {
     gboolean visible;
 } OSKData;
 
+static void set_visible(OSKData *data, gboolean visible);
+static GVariant* get_property(GDBusConnection *connection,
+                              const gchar *sender,
+                              const gchar *object_path,
+                              const gchar *interface_name,
+                              const gchar *property_name,
+                              GError **error,
+                              gpointer user_data);
+static gboolean set_property(GDBusConnection *connection,
+                             const gchar *sender,
+                             const gchar *object_path,
+                             const gchar *interface_name,
+                             const gchar *property_name,
+                             GVariant *value,
+                             GError **error,
+                             gpointer user_data);
+
 // Function to find PID of wvkbd
 static pid_t find_wvkbd_pid() {
     DIR *dir;
@@ -92,37 +109,13 @@ static void handle_method_call(GDBusConnection       *connection,
                                GVariant              *parameters,
                                GDBusMethodInvocation *invocation,
                                gpointer               user_data) {
+    g_print("Received method call: %s\n", method_name);
     OSKData *data = (OSKData *)user_data;
 
     if (g_strcmp0(method_name, "SetVisible") == 0) {
         gboolean visible;
         g_variant_get(parameters, "(b)", &visible);
-        
-        if (data->visible != visible) {
-            data->visible = visible;
-
-            // Here you would implement the actual logic to show/hide the OSK
-            g_print("Setting OSK visibility to: %s\n", visible ? "true" : "false");
-
-            // Send signal to wvkbd
-            send_signal_to_wvkbd(visible);
-
-            // Emit the PropertiesChanged signal
-            GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE_ARRAY);
-            g_variant_builder_add(builder, "{sv}", "Visible", g_variant_new_boolean(visible));
-            g_dbus_connection_emit_signal(connection,
-                                          NULL,
-                                          object_path,
-                                          "org.freedesktop.DBus.Properties",
-                                          "PropertiesChanged",
-                                          g_variant_new("(sa{sv}as)",
-                                                        interface_name,
-                                                        builder,
-                                                        NULL),
-                                          NULL);
-            g_variant_builder_unref(builder);
-        }
-
+        set_visible(data, visible);
         g_dbus_method_invocation_return_value(invocation, NULL);
     } else {
         g_dbus_method_invocation_return_error(invocation,
@@ -132,13 +125,13 @@ static void handle_method_call(GDBusConnection       *connection,
     }
 }
 
-static GVariant* handle_get_property(GDBusConnection  *connection,
-                                     const gchar      *sender,
-                                     const gchar      *object_path,
-                                     const gchar      *interface_name,
-                                     const gchar      *property_name,
-                                     GError          **error,
-                                     gpointer          user_data) {
+static GVariant* get_property(GDBusConnection  *connection,
+                              const gchar      *sender,
+                              const gchar      *object_path,
+                              const gchar      *interface_name,
+                              const gchar      *property_name,
+                              GError          **error,
+                              gpointer          user_data) {
     OSKData *data = (OSKData *)user_data;
 
     if (g_strcmp0(property_name, "Visible") == 0) {
@@ -148,15 +141,99 @@ static GVariant* handle_get_property(GDBusConnection  *connection,
     return NULL;
 }
 
+static gboolean set_property(GDBusConnection  *connection,
+                             const gchar      *sender,
+                             const gchar      *object_path,
+                             const gchar      *interface_name,
+                             const gchar      *property_name,
+                             GVariant         *value,
+                             GError          **error,
+                             gpointer          user_data) {
+    OSKData *data = (OSKData *)user_data;
+
+    if (g_strcmp0(property_name, "Visible") == 0) {
+        gboolean visible;
+        g_variant_get(value, "b", &visible);
+        set_visible(data, visible);
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+static void set_visible(OSKData *data, gboolean visible) {
+    g_print("set_visible called with value: %d\n", visible);
+    if (data->visible != visible) {
+        data->visible = visible;
+        send_signal_to_wvkbd(visible);
+
+        GVariantBuilder *builder;
+        GError *error = NULL;
+
+        builder = g_variant_builder_new(G_VARIANT_TYPE_ARRAY);
+        g_variant_builder_add(builder, "{sv}", "Visible",
+                              g_variant_new_boolean(visible));
+
+        g_dbus_connection_emit_signal(data->connection,
+                                      NULL,
+                                      OSK_OBJECT_PATH,
+                                      "org.freedesktop.DBus.Properties",
+                                      "PropertiesChanged",
+                                      g_variant_new("(sa{sv}as)",
+                                                    OSK_INTERFACE,
+                                                    builder,
+                                                    NULL),
+                                      &error);
+
+        if (error != NULL) {
+            g_warning("Failed to emit PropertiesChanged: %s", error->message);
+            g_error_free(error);
+        }
+
+        g_variant_builder_unref(builder);
+        g_print("Emitted PropertiesChanged signal for Visible property\n");
+    } else {
+        g_print("Visibility unchanged, not emitting signal\n");
+    }
+}
+
+static GDBusMethodInfo set_visible_method = {
+    -1, "SetVisible",
+    (GDBusArgInfo *[]) {
+        &(GDBusArgInfo) { -1, "visible", "b", NULL },
+        NULL
+    },
+    NULL,
+    NULL
+};
+
+static GDBusMethodInfo *methods[] = {&set_visible_method, NULL};
+static GDBusSignalInfo *signals[] = {NULL};
+
+static GDBusPropertyInfo visible_property = {
+    -1, "Visible", "b", G_DBUS_PROPERTY_INFO_FLAGS_READABLE, NULL
+};
+
+static GDBusPropertyInfo *properties[] = {&visible_property, NULL};
+
+static GDBusInterfaceInfo interface_info = {
+    -1, OSK_INTERFACE,
+    methods,
+    signals,
+    properties,
+    NULL
+};
+
 static const GDBusInterfaceVTable interface_vtable = {
     handle_method_call,
-    handle_get_property,
-    NULL  // We don't need a setter as our property is read-only
+    get_property,
+    set_property
 };
 
 static void on_bus_acquired(GDBusConnection *connection,
                             const gchar     *name,
                             gpointer         user_data) {
+    g_print("Acquired the name %s on the session bus\n", name);
     OSKData *data = g_new0(OSKData, 1);
     data->connection = connection;
     data->visible = FALSE;  // Initially not visible
@@ -164,7 +241,7 @@ static void on_bus_acquired(GDBusConnection *connection,
     GError *error = NULL;
     guint registration_id = g_dbus_connection_register_object(connection,
                                                              OSK_OBJECT_PATH,
-                                                             (GDBusInterfaceInfo *)user_data,
+                                                             &interface_info,
                                                              &interface_vtable,
                                                              data,
                                                              g_free,
@@ -182,40 +259,21 @@ int main(void) {
 
     loop = g_main_loop_new(NULL, FALSE);
 
-    GError *error = NULL;
-    GDBusNodeInfo *introspection_data = g_dbus_node_info_new_for_xml(
-        "<!DOCTYPE node PUBLIC \"-//freedesktop//DTD D-BUS Object Introspection 1.0//EN\"\n"
-        "\"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd\">\n"
-        "<node>\n"
-        "  <interface name=\"sm.puri.OSK0\">\n"
-        "    <method name=\"SetVisible\">\n"
-        "      <arg type=\"b\" direction=\"in\" name=\"visible\"/>\n"
-        "    </method>\n"
-        "    <property name=\"Visible\" type=\"b\" access=\"read\">\n"
-        "    </property>\n"
-        "  </interface>\n"
-        "</node>\n",
-        &error);
-
-    if (introspection_data == NULL) {
-        g_printerr("Error parsing introspection XML: %s\n", error->message);
-        g_error_free(error);
-        return 1;
-    }
-
     owner_id = g_bus_own_name(G_BUS_TYPE_SESSION,
                               OSK_INTERFACE,
                               G_BUS_NAME_OWNER_FLAGS_NONE,
                               on_bus_acquired,
                               NULL,
                               NULL,
-                              introspection_data->interfaces[0],
+                              NULL,
                               NULL);
 
+    g_print("Entering main loop...\n");
     g_main_loop_run(loop);
 
+    g_print("Exiting...\n");
+
     g_bus_unown_name(owner_id);
-    g_dbus_node_info_unref(introspection_data);
     g_main_loop_unref(loop);
 
     return 0;
