@@ -5,6 +5,17 @@
 #include <string.h>
 #include <stdio.h>
 
+#include <pthread.h>
+#include <stdlib.h>
+#include <string.h>
+#include <wayland-client.h>
+#include "proto/input-method-unstable-v2-client-protocol.h"
+
+// Add the Wayland client headers and global variables
+static struct zwp_input_method_v2 *input_method = NULL;
+static struct wl_seat *seat = NULL;
+static struct zwp_input_method_manager_v2 *input_method_manager = NULL;
+
 #define OSK_INTERFACE "sm.puri.OSK0"
 #define OSK_OBJECT_PATH "/sm/puri/OSK0"
 
@@ -253,11 +264,138 @@ static void on_bus_acquired(GDBusConnection *connection,
     }
 }
 
+
+static void global_registry_handler(void *data, struct wl_registry *registry, uint32_t id, const char *interface, uint32_t version) {
+    printf("Interface added: %s (id: %d, version: %d)\n", interface, id, version);
+    if (strcmp(interface, zwp_input_method_manager_v2_interface.name) == 0) {
+        input_method_manager = wl_registry_bind(registry, id, &zwp_input_method_manager_v2_interface, version);
+        printf("Bound input method manager interface.\n");
+    } else if (strcmp(interface, wl_seat_interface.name) == 0) {
+        seat = wl_registry_bind(registry, id, &wl_seat_interface, version);
+        printf("Bound wl_seat interface.\n");
+    }
+}
+
+static void global_registry_remove_handler(void *data, struct wl_registry *registry, uint32_t id) {
+    printf("Global removed: id: %d\n", id);
+}
+
+static void set_osk_visibility(gboolean visible) {
+    GDBusConnection *connection;
+    GError *error = NULL;
+
+    connection = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, &error);
+    if (error != NULL) {
+        g_printerr("Failed to get session bus: %s\n", error->message);
+        g_error_free(error);
+        return;
+    }
+
+    GVariant *result = g_dbus_connection_call_sync(
+        connection,
+        OSK_INTERFACE,  // destination bus name
+        OSK_OBJECT_PATH, // object path
+        OSK_INTERFACE,  // interface name
+        "SetVisible",   // method name
+        g_variant_new("(b)", visible), // parameters
+        NULL,           // expected reply type
+        G_DBUS_CALL_FLAGS_NONE,
+        -1,
+        NULL,
+        &error
+    );
+
+    if (error != NULL) {
+        g_printerr("Failed to call SetVisible method: %s\n", error->message);
+        g_error_free(error);
+    } else {
+        g_variant_unref(result);
+    }
+
+    g_object_unref(connection);
+}
+
+static void handle_activate(void *data, struct zwp_input_method_v2 *input_method) {
+    printf("User clicked in text input area.\n");
+    set_osk_visibility(TRUE); // Set OSK visibility to true when activated
+}
+
+static void handle_deactivate(void *data, struct zwp_input_method_v2 *input_method) {
+    printf("User left text input area.\n");
+    set_osk_visibility(FALSE); // Set OSK visibility to false when deactivated
+}
+
+static void handle_unavailable(void *data, struct zwp_input_method_v2 *input_method) {
+    printf("Input method unavailable.\n");
+}
+
+static void handle_surrounding_text(void *data, struct zwp_input_method_v2 *input_method, const char *text, uint32_t cursor, uint32_t anchor) {
+    printf("Surrounding text: %s, cursor: %u, anchor: %u\n", text, cursor, anchor);
+}
+
+static void handle_text_change_cause(void *data, struct zwp_input_method_v2 *input_method, uint32_t cause) {
+    printf("Text change cause: %u\n", cause);
+}
+
+static void handle_content_type(void *data, struct zwp_input_method_v2 *input_method, uint32_t hint, uint32_t purpose) {
+    printf("Content type: hint: %u, purpose: %u\n", hint, purpose);
+}
+
+static void handle_done(void *data, struct zwp_input_method_v2 *input_method) {
+    printf("Input method done event.\n");
+}
+
+static struct zwp_input_method_v2_listener input_method_listener = {
+    .activate = handle_activate,
+    .deactivate = handle_deactivate,
+    .unavailable = handle_unavailable,
+    .surrounding_text = handle_surrounding_text,
+    .text_change_cause = handle_text_change_cause,
+    .content_type = handle_content_type,
+    .done = handle_done,
+};
+
+void *run_main_loop(void *arg) {
+    GMainLoop *loop = (GMainLoop *)arg;
+    g_main_loop_run(loop);
+    return NULL;
+}
+
+void *dispatch_wayland(void *arg) {
+    struct wl_display *display = (struct wl_display *)arg;
+    while (wl_display_dispatch(display) != -1) {
+        // Optionally handle errors or interruptions
+    }
+    return NULL;
+}
+
 int main(void) {
     GMainLoop *loop;
     guint owner_id;
+    pthread_t loop_thread, wayland_thread;
 
     loop = g_main_loop_new(NULL, FALSE);
+
+    GError *error = NULL;
+    GDBusNodeInfo *introspection_data = g_dbus_node_info_new_for_xml(
+        "<!DOCTYPE node PUBLIC \"-//freedesktop//DTD D-BUS Object Introspection 1.0//EN\"\n"
+        "\"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd\">\n"
+        "<node>\n"
+        "  <interface name=\"sm.puri.OSK0\">\n"
+        "    <method name=\"SetVisible\">\n"
+        "      <arg type=\"b\" direction=\"in\" name=\"visible\"/>\n"
+        "    </method>\n"
+        "    <property name=\"Visible\" type=\"b\" access=\"read\">\n"
+        "    </property>\n"
+        "  </interface>\n"
+        "</node>\n",
+        &error);
+
+    if (introspection_data == NULL) {
+        g_printerr("Error parsing introspection XML: %s\n", error->message);
+        g_error_free(error);
+        return 1;
+    }
 
     owner_id = g_bus_own_name(G_BUS_TYPE_SESSION,
                               OSK_INTERFACE,
@@ -265,16 +403,72 @@ int main(void) {
                               on_bus_acquired,
                               NULL,
                               NULL,
-                              NULL,
+                              introspection_data->interfaces[0],
                               NULL);
 
-    g_print("Entering main loop...\n");
-    g_main_loop_run(loop);
+    // Wayland client initialization
+    struct wl_display *display;
+    struct wl_registry *registry;
 
-    g_print("Exiting...\n");
+    display = wl_display_connect(NULL);
+    if (!display) {
+        fprintf(stderr, "Failed to connect to Wayland display\n");
+        return EXIT_FAILURE;
+    }
+    printf("Connected to Wayland display.\n");
+
+    registry = wl_display_get_registry(display);
+    if (!registry) {
+        fprintf(stderr, "Failed to get Wayland registry\n");
+        wl_display_disconnect(display);
+        return EXIT_FAILURE;
+    }
+    printf("Got Wayland registry.\n");
+
+    wl_registry_add_listener(registry, &(struct wl_registry_listener){
+        .global = global_registry_handler,
+        .global_remove = global_registry_remove_handler
+    }, NULL);
+
+    wl_display_roundtrip(display);
+
+    if (!input_method_manager || !seat) {
+        fprintf(stderr, "Input method manager or seat not available\n");
+        wl_display_disconnect(display);
+        return EXIT_FAILURE;
+    }
+
+    input_method = zwp_input_method_manager_v2_get_input_method(input_method_manager, seat);
+    if (!input_method) {
+        fprintf(stderr, "Failed to create input method object\n");
+        wl_display_disconnect(display);
+        return EXIT_FAILURE;
+    }
+    zwp_input_method_v2_add_listener(input_method, &input_method_listener, NULL);
+    printf("Created input method object and added listener.\n");
+
+    // Create a new thread to run the GLib main loop
+    pthread_create(&loop_thread, NULL, run_main_loop, loop);
+
+    // Create a new thread to handle Wayland display dispatch
+    pthread_create(&wayland_thread, NULL, dispatch_wayland, display);
+
+    // Main thread can perform other tasks or simply wait
+    // For example, you can join the threads here if needed
+    pthread_join(wayland_thread, NULL);
+
+    // Stop the GLib main loop
+    g_main_loop_quit(loop);
+
+    // Wait for the GLib main loop thread to finish
+    pthread_join(loop_thread, NULL);
 
     g_bus_unown_name(owner_id);
+    g_dbus_node_info_unref(introspection_data);
     g_main_loop_unref(loop);
 
-    return 0;
+    wl_display_disconnect(display);
+    printf("Disconnected from Wayland display.\n");
+
+    return EXIT_SUCCESS;
 }
