@@ -109,7 +109,7 @@ static void handle_method_call(GDBusConnection       *connection,
                                GVariant              *parameters,
                                GDBusMethodInvocation *invocation,
                                gpointer               user_data) {
-    g_print("Received method call: %s\n", method_name):
+    g_print("Received method call: %s\n", method_name);
     OSKData *data = (OSKData *)user_data;
 
     if (g_strcmp0(method_name, "SetVisible") == 0) {
