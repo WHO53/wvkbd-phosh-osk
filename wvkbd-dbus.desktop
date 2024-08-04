@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Name=wvkbd phosh dbus
+Comment=Virtual keyboard using D-Bus interface
+Exec=wvkbd-dbus
+Icon=keyboard
+Terminal=false
+Type=Application
+Categories=Utility;
