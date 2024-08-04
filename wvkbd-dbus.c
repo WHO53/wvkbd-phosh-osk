@@ -241,6 +241,11 @@ static const GDBusInterfaceVTable interface_vtable = {
     set_property
 };
 
+static void initialize_osk_state(OSKData *data) {
+    data ->visible = TRUE;
+    set_visible(data, FALSE);
+}
+
 static void on_bus_acquired(GDBusConnection *connection,
                             const gchar     *name,
                             gpointer         user_data) {
@@ -261,6 +266,8 @@ static void on_bus_acquired(GDBusConnection *connection,
     if (registration_id == 0) {
         g_printerr("Error registering object: %s\n", error->message);
         g_error_free(error);
+    } else {
+        initialize_osk_state(data);
     }
 }
 
