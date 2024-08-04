@@ -1,4 +1,0 @@
-#!/bin/sh
-/usr/bin/wvkbd-mobintl > /dev/null &
-/usr/bin/wvkbd-dbus > /dev/null &
-exit 0
