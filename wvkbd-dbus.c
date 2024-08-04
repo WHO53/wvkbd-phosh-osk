@@ -41,6 +41,14 @@ static gboolean set_property(GDBusConnection *connection,
                              GError **error,
                              gpointer user_data);
 
+// Global logging flag
+static gboolean enable_logging = FALSE;
+
+// Logging macro
+#define log(fmt, ...) \
+    do { if (enable_logging) g_print(fmt, ##__VA_ARGS__); } while (0)
+
+
 // Function to find PID of wvkbd
 static pid_t find_wvkbd_pid() {
     DIR *dir;
@@ -80,9 +88,9 @@ static void send_signal_to_wvkbd(gboolean visible) {
     if (pid > 0) {
         int sig = visible ? SIGUSR2 : SIGUSR1;
         kill(pid, sig);
-        g_print("Sent %s to wvkbd-mobintl (PID: %d)\n", visible ? "SIGUSR2" : "SIGUSR1", pid);
+        log("Sent %s to wvkbd-mobintl (PID: %d)\n", visible ? "SIGUSR2" : "SIGUSR1", pid);
     } else {
-        g_print("wvkbd-mobintl process not found\n");
+        log("wvkbd-mobintl process not found\n");
     }
 }
 
@@ -94,7 +102,7 @@ static void handle_method_call(GDBusConnection       *connection,
                                GVariant              *parameters,
                                GDBusMethodInvocation *invocation,
                                gpointer               user_data) {
-    g_print("Received method call: %s\n", method_name);
+    log("Received method call: %s\n", method_name);
     OSKData *data = (OSKData *)user_data;
 
     if (g_strcmp0(method_name, "SetVisible") == 0) {
@@ -147,7 +155,7 @@ static gboolean set_property(GDBusConnection  *connection,
 }
 
 static void set_visible(OSKData *data, gboolean visible) {
-    g_print("set_visible called with value: %d\n", visible);
+    log("set_visible called with value: %d\n", visible);
     if (data->visible != visible) {
         data->visible = visible;
         send_signal_to_wvkbd(visible);
@@ -176,9 +184,9 @@ static void set_visible(OSKData *data, gboolean visible) {
         }
 
         g_variant_builder_unref(builder);
-        g_print("Emitted PropertiesChanged signal for Visible property\n");
+        log("Emitted PropertiesChanged signal for Visible property\n");
     } else {
-        g_print("Visibility unchanged, not emitting signal\n");
+        log("Visibility unchanged, not emitting signal\n");
     }
 }
 
@@ -223,7 +231,7 @@ static void initialize_osk_state(OSKData *data) {
 static void on_bus_acquired(GDBusConnection *connection,
                             const gchar     *name,
                             gpointer         user_data) {
-    g_print("Acquired the name %s on the session bus\n", name);
+    log("Acquired the name %s on the session bus\n", name);
     OSKData *data = g_new0(OSKData, 1);
     data->connection = connection;
     data->visible = FALSE;  // Initially not visible
@@ -238,7 +246,7 @@ static void on_bus_acquired(GDBusConnection *connection,
                                                              &error);
 
     if (registration_id == 0) {
-        g_printerr("Error registering object: %s\n", error->message);
+        log("Error registering object: %s\n", error->message);
         g_error_free(error);
     } else {
         initialize_osk_state(data);
@@ -247,18 +255,18 @@ static void on_bus_acquired(GDBusConnection *connection,
 
 
 static void global_registry_handler(void *data, struct wl_registry *registry, uint32_t id, const char *interface, uint32_t version) {
-    printf("Interface added: %s (id: %d, version: %d)\n", interface, id, version);
+    log("Interface added: %s (id: %d, version: %d)\n", interface, id, version);
     if (strcmp(interface, zwp_input_method_manager_v2_interface.name) == 0) {
         input_method_manager = wl_registry_bind(registry, id, &zwp_input_method_manager_v2_interface, version);
-        printf("Bound input method manager interface.\n");
+        log("Bound input method manager interface.\n");
     } else if (strcmp(interface, wl_seat_interface.name) == 0) {
         seat = wl_registry_bind(registry, id, &wl_seat_interface, version);
-        printf("Bound wl_seat interface.\n");
+        log("Bound wl_seat interface.\n");
     }
 }
 
 static void global_registry_remove_handler(void *data, struct wl_registry *registry, uint32_t id) {
-    printf("Global removed: id: %d\n", id);
+    log("Global removed: id: %d\n", id);
 }
 
 static void set_osk_visibility(gboolean visible) {
@@ -267,7 +275,7 @@ static void set_osk_visibility(gboolean visible) {
 
     connection = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, &error);
     if (error != NULL) {
-        g_printerr("Failed to get session bus: %s\n", error->message);
+        log("Failed to get session bus: %s\n", error->message);
         g_error_free(error);
         return;
     }
@@ -287,7 +295,7 @@ static void set_osk_visibility(gboolean visible) {
     );
 
     if (error != NULL) {
-        g_printerr("Failed to call SetVisible method: %s\n", error->message);
+        log("Failed to call SetVisible method: %s\n", error->message);
         g_error_free(error);
     } else {
         g_variant_unref(result);
@@ -297,33 +305,33 @@ static void set_osk_visibility(gboolean visible) {
 }
 
 static void handle_activate(void *data, struct zwp_input_method_v2 *input_method) {
-    printf("User clicked in text input area.\n");
+    log("User clicked in text input area.\n");
     set_osk_visibility(TRUE); // Set OSK visibility to true when activated
 }
 
 static void handle_deactivate(void *data, struct zwp_input_method_v2 *input_method) {
-    printf("User left text input area.\n");
+    log("User left text input area.\n");
     set_osk_visibility(FALSE); // Set OSK visibility to false when deactivated
 }
 
 static void handle_unavailable(void *data, struct zwp_input_method_v2 *input_method) {
-    printf("Input method unavailable.\n");
+    log("Input method unavailable.\n");
 }
 
 static void handle_surrounding_text(void *data, struct zwp_input_method_v2 *input_method, const char *text, uint32_t cursor, uint32_t anchor) {
-    printf("Surrounding text: %s, cursor: %u, anchor: %u\n", text, cursor, anchor);
+    log("Surrounding text: %s, cursor: %u, anchor: %u\n", text, cursor, anchor);
 }
 
 static void handle_text_change_cause(void *data, struct zwp_input_method_v2 *input_method, uint32_t cause) {
-    printf("Text change cause: %u\n", cause);
+    log("Text change cause: %u\n", cause);
 }
 
 static void handle_content_type(void *data, struct zwp_input_method_v2 *input_method, uint32_t hint, uint32_t purpose) {
-    printf("Content type: hint: %u, purpose: %u\n", hint, purpose);
+    log("Content type: hint: %u, purpose: %u\n", hint, purpose);
 }
 
 static void handle_done(void *data, struct zwp_input_method_v2 *input_method) {
-    printf("Input method done event.\n");
+    log("Input method done event.\n");
 }
 
 static struct zwp_input_method_v2_listener input_method_listener = {
@@ -373,7 +381,7 @@ int main(void) {
         &error);
 
     if (introspection_data == NULL) {
-        g_printerr("Error parsing introspection XML: %s\n", error->message);
+        log("Error parsing introspection XML: %s\n", error->message);
         g_error_free(error);
         return 1;
     }
@@ -396,7 +404,7 @@ int main(void) {
         fprintf(stderr, "Failed to connect to Wayland display\n");
         return EXIT_FAILURE;
     }
-    printf("Connected to Wayland display.\n");
+    log("Connected to Wayland display.\n");
 
     registry = wl_display_get_registry(display);
     if (!registry) {
@@ -404,7 +412,7 @@ int main(void) {
         wl_display_disconnect(display);
         return EXIT_FAILURE;
     }
-    printf("Got Wayland registry.\n");
+    log("Got Wayland registry.\n");
 
     wl_registry_add_listener(registry, &(struct wl_registry_listener){
         .global = global_registry_handler,
@@ -426,7 +434,7 @@ int main(void) {
         return EXIT_FAILURE;
     }
     zwp_input_method_v2_add_listener(input_method, &input_method_listener, NULL);
-    printf("Created input method object and added listener.\n");
+    log("Created input method object and added listener.\n");
 
     // Create a new thread to run the GLib main loop
     pthread_create(&loop_thread, NULL, run_main_loop, loop);
@@ -449,7 +457,7 @@ int main(void) {
     g_main_loop_unref(loop);
 
     wl_display_disconnect(display);
-    printf("Disconnected from Wayland display.\n");
+    log("Disconnected from Wayland display.\n");
 
     return EXIT_SUCCESS;
 }
