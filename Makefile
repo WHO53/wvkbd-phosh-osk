@@ -7,7 +7,7 @@ PKGS = wayland-client glib-2.0 gio-unix-2.0
 WVKBD_SOURCES += $(wildcard $(SRC)/*.c)
 WVKBD_HEADERS += $(wildcard $(SRC)/*.h)
 
-CFLAGS += -std=gnu99 -Wall -g -DWITH_WAYLAND_SHM \"
+CFLAGS += -std=gnu99 -Wall -g -DWITH_WAYLAND_SHM
 CFLAGS += $(shell pkg-config --cflags $(PKGS))
 LDFLAGS += $(shell pkg-config --libs $(PKGS)) -lm -lutil -lrt
 
