@@ -86,6 +86,7 @@ static pid_t find_wvkbd_pid() {
 static void send_signal_to_wvkbd(gboolean visible) {
     pid_t pid = find_wvkbd_pid();
     if (pid > 0) {
+        usleep(100000); //  let me breathe
         int sig = visible ? SIGUSR2 : SIGUSR1;
         kill(pid, sig);
         log("Sent %s to wvkbd-mobintl (PID: %d)\n", visible ? "SIGUSR2" : "SIGUSR1", pid);
