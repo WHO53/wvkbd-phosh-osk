@@ -1,0 +1,75 @@
+version: 2.1
+
+defaults: &default-machine
+  machine:
+    image: ubuntu-2204:current
+    resource_class: arm.medium
+
+jobs:
+  debian-build:
+    <<: *default-machine
+    parameters:
+      suite:
+        type: string
+        default: "next"
+      architecture:
+        type: string
+        default: "arm64"
+      full_build:
+        type: string # yes or no
+        default: "yes"
+      extra_repos:
+        type: string
+        default: ""
+      host_arch:
+        type: string
+        default: ""
+    steps:
+      - run:
+          name: << parameters.architecture >> build
+          no_output_timeout: 60m
+          command: |
+            mkdir -p /tmp/buildd-results
+            git clone -b "$CIRCLE_BRANCH" "https://github.com/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}.git" sources
+            pkg=$(grep '^Package:' sources/debian/control | awk '{print $2}' | paste -sd " ")
+            if [ -n "${CIRCLE_TAG}" ]; then
+              cd sources
+              git fetch --tags
+              git checkout "${CIRCLE_TAG}"
+              cd ..
+            fi
+            docker run \
+              --rm \
+              -e CI \
+              -e CIRCLECI \
+              -e CIRCLE_BRANCH="${CIRCLE_BRANCH}" \
+              -e CIRCLE_SHA1="${CIRCLE_SHA1}" \
+              -e CIRCLE_TAG="${CIRCLE_TAG}" \
+              -e EXTRA_REPOS="<< parameters.extra_repos >>" \
+              -e RELENG_FULL_BUILD="<< parameters.full_build >>" \
+              -e RELENG_HOST_ARCH="<< parameters.host_arch >>" \
+              -v /tmp/buildd-results:/buildd \
+              -v ${PWD}/sources:/buildd/sources \
+              --cap-add=SYS_ADMIN \
+              --security-opt apparmor:unconfined \
+              --security-opt seccomp=unconfined \
+              quay.io/droidian/build-essential:<< parameters.suite >>-<< parameters.architecture >> \
+              /bin/sh -c "cd /buildd/sources ; releng-build-package"
+
+            git config --global user.email "notwho53@gmail.com"
+            git config --global user.name "WHO53"
+            
+            git clone https://$PAT@github.com/WHO53/apt.git --depth=1
+            cd apt/packages
+            rm -f $(echo $pkg | sed 's/\([^ ]*\)/\1*/g')
+            cp /tmp/buildd-results/*.deb .
+            git add -A
+            git commit -m "Circle CI: ${CIRCLE_PROJECT_REPONAME}:${CIRCLE_SHA1:0:7}"
+            git push origin main
+
+workflows:
+  version: 2
+  build-and-deploy:
+    jobs:
+      - debian-build:
+          context: Orb
