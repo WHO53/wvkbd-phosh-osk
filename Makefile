@@ -1,6 +1,10 @@
 NAME=wvkbd-dbus
 BIN=${NAME}
 SRC=.
+PREFIX ?= /usr
+BINDIR ?= $(PREFIX)/bin
+SHAREDIR ?= $(PREFIX)/share
+AUTOSTARTDIR ?= /etc/xdg/autostart
 
 PKGS = wayland-client glib-2.0 gio-unix-2.0
 
@@ -32,8 +36,13 @@ $(OBJECTS): $(HDRS) $(WVKBD_HEADERS)
 wvkbd-dbus: $(OBJECTS)
 	$(CC) -o wvkbd-dbus $(OBJECTS) $(LDFLAGS)
 
+install:
+	install -D wvkbd-dbus $(DESTDIR)$(BINDIR)/wvkbd-dbus
+	install -D etc/xdg/autostart/wvkbd-dbus.desktop $(DESTDIR)$(AUTOSTARTDIR)/wvkbd-dbus.desktop
+	install -D usr/share/WHO53/wvkbd.desktop $(DESTDIR)$(SHAREDIR)/WHO53/wvkbd.desktop
+
 clean:
-	rm -f $(OBJECTS) $(HDRS) $(WAYLAND_SRC) ${BIN}
+	rm -rf $(OBJECTS) $(HDRS) $(WAYLAND_SRC) ${BIN} usr/bin
 
 format:
 	clang-format -i $(WVKBD_SOURCES) $(WVKBD_HEADERS)

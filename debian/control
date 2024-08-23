@@ -1,0 +1,20 @@
+Source: wvkbd-phosh-osk
+Maintainer: Deepak Kumar <notwho53@gmail.com>
+Section: metapackages
+Priority: optional
+Build-Depends: 
+  debhelper (>= 10),
+  libglib2.0-dev,
+  libcairo2-dev,
+  libwayland-dev,
+  libpango1.0-dev,
+  libxkbcommon-dev,
+Standards-Version: 4.5.0.3
+Vcs-Browser: https://github.com/WHO53/wvkbd-phosh-osk
+Vcs-Git: https://github.com/WHO53/wvkbd-phosh-osk.git
+
+Package: wvkbd-phosh-osk
+Architecture: all
+Depends: ${misc:Depends},
+         wvkbd,
+Description: wvkbd phosh osk

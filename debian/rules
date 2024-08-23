@@ -1,0 +1,14 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	$(MAKE)
+
+override_dh_auto_install:
+	$(MAKE) DESTDIR=$(CURDIR)/debian/$(shell dh_listpackages) install
+
+override_dh_clean:
+	$(MAKE) clean
+	dh_clean
