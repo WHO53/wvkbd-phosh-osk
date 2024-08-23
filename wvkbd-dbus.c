@@ -67,7 +67,7 @@ static pid_t find_wvkbd_pid() {
                     FILE *fp = fopen(path, "r");
                     if (fp) {
                         if (fgets(line, sizeof(line), fp) != NULL) {
-                            if (strncmp(line, "wvkbd-mobintl", 5) == 0) {
+                            if (strncmp(line, "wvkbd-mobintl", 13) == 0) {
                                 pid = (pid_t)lpid;
                                 fclose(fp);
                                 break;
