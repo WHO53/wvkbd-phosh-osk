@@ -5,10 +5,7 @@ Priority: optional
 Build-Depends: 
   debhelper (>= 10),
   libglib2.0-dev,
-  libcairo2-dev,
   libwayland-dev,
-  libpango1.0-dev,
-  libxkbcommon-dev,
 Standards-Version: 4.5.0.3
 Vcs-Browser: https://github.com/WHO53/wvkbd-phosh-osk
 Vcs-Git: https://github.com/WHO53/wvkbd-phosh-osk.git
