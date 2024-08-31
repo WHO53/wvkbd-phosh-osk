@@ -19,6 +19,9 @@ static struct zwp_input_method_manager_v2 *input_method_manager = NULL;
 #define OSK_INTERFACE "sm.puri.OSK0"
 #define OSK_OBJECT_PATH "/sm/puri/OSK0"
 
+static guint visibility_timeout_id = 0;
+static gboolean pending_visibility = FALSE;
+
 typedef struct {
     GDBusConnection *connection;
     gboolean visible;
@@ -155,8 +158,12 @@ static gboolean set_property(GDBusConnection  *connection,
     return FALSE;
 }
 
-static void set_visible(OSKData *data, gboolean visible) {
-    log("set_visible called with value: %d\n", visible);
+static gboolean apply_visibility_change(gpointer user_data) {
+    OSKData *data = (OSKData *)user_data;
+    gboolean visible = pending_visibility;
+    
+    visibility_timeout_id = 0;
+    
     if (data->visible != visible) {
         data->visible = visible;
         send_signal_to_wvkbd(visible);
@@ -189,6 +196,20 @@ static void set_visible(OSKData *data, gboolean visible) {
     } else {
         log("Visibility unchanged, not emitting signal\n");
     }
+    
+    return G_SOURCE_REMOVE;
+}
+
+static void set_visible(OSKData *data, gboolean visible) {
+    log("set_visible called with value: %d\n", visible);
+    
+    pending_visibility = visible;
+    
+    if (visibility_timeout_id != 0) {
+        g_source_remove(visibility_timeout_id);
+    }
+    
+    visibility_timeout_id = g_timeout_add(110, apply_visibility_change, data);
 }
 
 static GDBusMethodInfo set_visible_method = {
@@ -307,12 +328,12 @@ static void set_osk_visibility(gboolean visible) {
 
 static void handle_activate(void *data, struct zwp_input_method_v2 *input_method) {
     log("User clicked in text input area.\n");
-    set_osk_visibility(TRUE); // Set OSK visibility to true when activated
+    set_osk_visibility(TRUE);
 }
 
 static void handle_deactivate(void *data, struct zwp_input_method_v2 *input_method) {
     log("User left text input area.\n");
-    set_osk_visibility(FALSE); // Set OSK visibility to false when deactivated
+    set_osk_visibility(FALSE);
 }
 
 static void handle_unavailable(void *data, struct zwp_input_method_v2 *input_method) {
