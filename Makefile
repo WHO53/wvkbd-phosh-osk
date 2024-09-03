@@ -38,11 +38,12 @@ wvkbd-dbus: $(OBJECTS)
 
 install:
 	install -D wvkbd-dbus $(DESTDIR)$(BINDIR)/wvkbd-dbus
+	install -D usr/bin/wvkbd-mobintl $(DESTDIR)$(BINDIR)/wvkbd-mobintl
 	install -D etc/xdg/autostart/wvkbd-dbus.desktop $(DESTDIR)$(AUTOSTARTDIR)/wvkbd-dbus.desktop
 	install -D usr/share/WHO53/wvkbd.desktop $(DESTDIR)$(SHAREDIR)/WHO53/wvkbd.desktop
 
 clean:
-	rm -rf $(OBJECTS) $(HDRS) $(WAYLAND_SRC) ${BIN} usr/bin
+	rm -f $(OBJECTS) $(HDRS) $(WAYLAND_SRC) ${BIN} usr/bin/wvkbd-dbus
 
 format:
 	clang-format -i $(WVKBD_SOURCES) $(WVKBD_HEADERS)

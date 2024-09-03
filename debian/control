@@ -13,5 +13,4 @@ Vcs-Git: https://github.com/WHO53/wvkbd-phosh-osk.git
 Package: wvkbd-phosh-osk
 Architecture: all
 Depends: ${misc:Depends},
-         wvkbd,
 Description: wvkbd phosh osk
