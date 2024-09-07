@@ -1,4 +1,4 @@
-Download deb package `wvkbd-phosh-osk` from [here](https://who53.github.io/apt/)
+Download deb package `wvkbd-phosh-osk` from [here](https://who53.me/apt/)
 
 Install it with 
 
