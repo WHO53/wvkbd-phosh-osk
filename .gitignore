@@ -1,0 +1,7 @@
+*~
+*\#*
+*.o
+*-client-protocol.h
+.gdb_history
+*.log
+wvkbd-dbus
