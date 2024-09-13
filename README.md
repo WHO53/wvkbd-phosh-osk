@@ -1,5 +1,18 @@
-Download deb package `wvkbd-phosh-osk` from [here](https://who53.me/apt/)
+## Installation Guide
 
-Install it with 
+1. Download the `wvkbd-phosh-osk` deb package from [here](https://who53.me/apt/).
 
-`sudo dpkg -i path/to/wvkbd-phosh-osk-version.deb`
+
+2. Install the package using the following command:
+    ```bash
+    sudo dpkg -i path/to/wvkbd-phosh-osk-version.deb
+    ```
+
+3. After installation, you need to either:
+
+- Restart Phosh:
+    ```bash
+    systemctl restart phosh
+    ```
+
+- Or Reboot your device
