@@ -10,11 +10,16 @@
 #include <string.h>
 #include <wayland-client.h>
 #include "proto/input-method-unstable-v2-client-protocol.h"
+#include "proto/phoc-device-state-unstable-v1-client-protocol.h"
 
-// Add the Wayland client headers and global variables
 static struct zwp_input_method_v2 *input_method = NULL;
 static struct wl_seat *seat = NULL;
 static struct zwp_input_method_manager_v2 *input_method_manager = NULL;
+static struct zwp_input_method_v2_listener input_method_listener;
+static gboolean input_method_active = TRUE;
+
+static struct zphoc_device_state_v1 *device_state = NULL;
+static gboolean hwkbd = FALSE;
 
 #define OSK_INTERFACE "sm.puri.OSK0"
 #define OSK_OBJECT_PATH "/sm/puri/OSK0"
@@ -44,15 +49,11 @@ static gboolean set_property(GDBusConnection *connection,
                              GError **error,
                              gpointer user_data);
 
-// Global logging flag
 static gboolean enable_logging = FALSE;
 
-// Logging macro
 #define log(fmt, ...) \
     do { if (enable_logging) g_print(fmt, ##__VA_ARGS__); } while (0)
 
-
-// Function to find PID of wvkbd
 static pid_t find_wvkbd_pid() {
     DIR *dir;
     struct dirent *ent;
@@ -85,7 +86,7 @@ static pid_t find_wvkbd_pid() {
     }
     return pid;
 }
-// Function to send SIGRTMIN to wvkbd
+
 static void send_signal_to_wvkbd(gboolean visible) {
     pid_t pid = find_wvkbd_pid();
     if (pid > 0) {
@@ -275,6 +276,21 @@ static void on_bus_acquired(GDBusConnection *connection,
     }
 }
 
+static void toggle_input_method_listener();
+
+static void handle_capabilities(void *data, struct zphoc_device_state_v1 *zphoc_device_state_v1, uint32_t capabilities) {
+    gboolean new_keyboard_state = (capabilities & ZPHOC_DEVICE_STATE_V1_CAPABILITY_KEYBOARD) != 0;
+
+    if (new_keyboard_state != hwkbd) {
+        hwkbd = new_keyboard_state;
+        log("Hardware kbd %s\n", hwkbd ? "connected" : "disconnected");
+        toggle_input_method_listener();
+    }
+}
+
+static const struct zphoc_device_state_v1_listener device_state_listener = {
+    .capabilities = handle_capabilities,
+};
 
 static void global_registry_handler(void *data, struct wl_registry *registry, uint32_t id, const char *interface, uint32_t version) {
     log("Interface added: %s (id: %d, version: %d)\n", interface, id, version);
@@ -284,6 +300,10 @@ static void global_registry_handler(void *data, struct wl_registry *registry, ui
     } else if (strcmp(interface, wl_seat_interface.name) == 0) {
         seat = wl_registry_bind(registry, id, &wl_seat_interface, version);
         log("Bound wl_seat interface.\n");
+    } else if (strcmp(interface, zphoc_device_state_v1_interface.name) == 0) {
+        device_state = wl_registry_bind(registry, id, &zphoc_device_state_v1_interface, version);
+        zphoc_device_state_v1_add_listener(device_state, &device_state_listener, NULL);
+       log("Bound phoc_device_state interface\n"); 
     }
 }
 
@@ -356,15 +376,42 @@ static void handle_done(void *data, struct zwp_input_method_v2 *input_method) {
     log("Input method done event.\n");
 }
 
-static struct zwp_input_method_v2_listener input_method_listener = {
-    .activate = handle_activate,
-    .deactivate = handle_deactivate,
-    .unavailable = handle_unavailable,
-    .surrounding_text = handle_surrounding_text,
-    .text_change_cause = handle_text_change_cause,
-    .content_type = handle_content_type,
-    .done = handle_done,
-};
+static void init_input_method_listener() {
+    input_method_listener = (struct zwp_input_method_v2_listener) {
+      .activate = handle_activate,
+      .deactivate = handle_deactivate,
+      .unavailable = handle_unavailable,
+      .surrounding_text = handle_surrounding_text,
+      .text_change_cause = handle_text_change_cause,
+      .content_type = handle_content_type,
+      .done = handle_done,
+    };
+}
+
+static void toggle_input_method_listener() {
+    if (input_method_active) {
+      if (input_method) {
+        zwp_input_method_v2_destroy(input_method);
+        input_method = NULL;
+      }
+      input_method_active = FALSE;
+      set_osk_visibility(FALSE);
+      log("Input method listener paused\n");
+    } else {
+      if (!input_method && input_method_manager && seat) {
+        input_method = zwp_input_method_manager_v2_get_input_method(input_method_manager, seat);
+        if (input_method) {
+          zwp_input_method_v2_add_listener(input_method, &input_method_listener, NULL);
+          input_method_active = TRUE;
+          log("Input method listener started\n");
+        } else {
+            log("Failed to create Input method object\n");
+          }
+      } else {
+        log("manager or seat unavailable\n");
+      }
+    }
+}
 
 void *run_main_loop(void *arg) {
     GMainLoop *loop = (GMainLoop *)arg;
@@ -375,7 +422,6 @@ void *run_main_loop(void *arg) {
 void *dispatch_wayland(void *arg) {
     struct wl_display *display = (struct wl_display *)arg;
     while (wl_display_dispatch(display) != -1) {
-        // Optionally handle errors or interruptions
     }
     return NULL;
 }
@@ -417,7 +463,6 @@ int main(void) {
                               introspection_data->interfaces[0],
                               NULL);
 
-    // Wayland client initialization
     struct wl_display *display;
     struct wl_registry *registry;
 
@@ -443,7 +488,7 @@ int main(void) {
 
     wl_display_roundtrip(display);
 
-    if (!input_method_manager || !seat) {
+    if (!input_method_manager || !seat || !device_state) {
         fprintf(stderr, "Input method manager or seat not available\n");
         wl_display_disconnect(display);
         return EXIT_FAILURE;
@@ -455,23 +500,18 @@ int main(void) {
         wl_display_disconnect(display);
         return EXIT_FAILURE;
     }
-    zwp_input_method_v2_add_listener(input_method, &input_method_listener, NULL);
-    log("Created input method object and added listener.\n");
 
-    // Create a new thread to run the GLib main loop
+    init_input_method_listener();
+    zwp_input_method_v2_add_listener(input_method, &input_method_listener, NULL);
+
     pthread_create(&loop_thread, NULL, run_main_loop, loop);
 
-    // Create a new thread to handle Wayland display dispatch
     pthread_create(&wayland_thread, NULL, dispatch_wayland, display);
 
-    // Main thread can perform other tasks or simply wait
-    // For example, you can join the threads here if needed
     pthread_join(wayland_thread, NULL);
 
-    // Stop the GLib main loop
     g_main_loop_quit(loop);
 
-    // Wait for the GLib main loop thread to finish
     pthread_join(loop_thread, NULL);
 
     g_bus_unown_name(owner_id);
