@@ -27,6 +27,9 @@ static gboolean hwkbd = FALSE;
 static guint visibility_timeout_id = 0;
 static gboolean pending_visibility = FALSE;
 
+static GSettings *a11y = NULL;
+static gboolean screen_keyboard_enabled = FALSE;
+
 typedef struct {
     GDBusConnection *connection;
     gboolean visible;
@@ -389,28 +392,38 @@ static void init_input_method_listener() {
 }
 
 static void toggle_input_method_listener() {
-    if (input_method_active) {
-      if (input_method) {
-        zwp_input_method_v2_destroy(input_method);
-        input_method = NULL;
-      }
-      input_method_active = FALSE;
-      set_osk_visibility(FALSE);
-      log("Input method listener paused\n");
-    } else {
-      if (!input_method && input_method_manager && seat) {
-        input_method = zwp_input_method_manager_v2_get_input_method(input_method_manager, seat);
-        if (input_method) {
-          zwp_input_method_v2_add_listener(input_method, &input_method_listener, NULL);
-          input_method_active = TRUE;
-          log("Input method listener started\n");
+    gboolean should_be_active = screen_keyboard_enabled && !hwkbd;
+    
+    if (should_be_active != input_method_active) {
+        if (should_be_active) {
+            if (!input_method && input_method_manager && seat) {
+                input_method = zwp_input_method_manager_v2_get_input_method(input_method_manager, seat);
+                if (input_method) {
+                    zwp_input_method_v2_add_listener(input_method, &input_method_listener, NULL);
+                    input_method_active = TRUE;
+                    log("Input method listener started\n");
+                } else {
+                    log("Failed to create Input method object\n");
+                }
+            } else {
+                log("manager or seat unavailable\n");
+            }
         } else {
-            log("Failed to create Input method object\n");
-          }
-      } else {
-        log("manager or seat unavailable\n");
-      }
+            if (input_method) {
+                zwp_input_method_v2_destroy(input_method);
+                input_method = NULL;
+            }
+            input_method_active = FALSE;
+            set_osk_visibility(FALSE);
+            log("Input method listener paused\n");
+        }
     }
+}
+
+static void on_screen_keyboard_enabled_changed(GSettings *settings, gchar *key, gpointer user_data) {
+  screen_keyboard_enabled = g_settings_get_boolean(settings, "screen-keyboard-enabled");
+  log("Screen kbd enabled: %s\n", screen_keyboard_enabled ? "true" : "false");
+  toggle_input_method_listener();
 }
 
 void *run_main_loop(void *arg) {
@@ -489,7 +502,7 @@ int main(void) {
     wl_display_roundtrip(display);
 
     if (!input_method_manager || !seat || !device_state) {
-        fprintf(stderr, "Input method manager or seat not available\n");
+        fprintf(stderr, "Input method manager or seat or phosh_device_state not available\n");
         wl_display_disconnect(display);
         return EXIT_FAILURE;
     }
@@ -501,8 +514,14 @@ int main(void) {
         return EXIT_FAILURE;
     }
 
+    a11y = g_settings_new("org.gnome.desktop.a11y.applications");
+    screen_keyboard_enabled = g_settings_get_boolean(a11y, "screen-keyboard-enabled");
+    log("INitial : %s\n", screen_keyboard_enabled ? "true" : "false");
+    g_signal_connect(a11y, "changed::screen-keyboard-enabled", G_CALLBACK(on_screen_keyboard_enabled_changed), NULL);
+
     init_input_method_listener();
     zwp_input_method_v2_add_listener(input_method, &input_method_listener, NULL);
+    toggle_input_method_listener();
 
     pthread_create(&loop_thread, NULL, run_main_loop, loop);
 
@@ -517,6 +536,7 @@ int main(void) {
     g_bus_unown_name(owner_id);
     g_dbus_node_info_unref(introspection_data);
     g_main_loop_unref(loop);
+    g_object_unref(a11y);
 
     wl_display_disconnect(display);
     log("Disconnected from Wayland display.\n");
