@@ -1,0 +1,52 @@
+wvkbd-phosh-osk (1.0) unstable; urgency=medium
+
+  [ WHO53 ]
+  * i
+
+  [ WHO53 ]
+  * Update wvkbd-dbus.c
+
+  [ WHO53 ]
+  * o
+
+  [ WHO53 ]
+  * Correct Signal based on Boolean value
+  * Update wvkbd-dbus.c
+
+  [ WHO53 ]
+  * auto toggle using wl protocol
+  * Initialize OSK visibilty to FALSE on startup
+  * rm multipe pid handle and launch script
+  * wvkbd-dbus.desktop for autostart
+
+  [ WHO53 ]
+  * Create README.md
+
+  [ WHO53 ]
+  * LOG Disabled
+  * fix Makefile
+  * add 0.1 sec delay to fix random wvkbd crash
+  * clean
+  * add debian packaging
+  * add circleci
+  * dont send sigusr1 to yourself dumbass
+  * add alternative setup
+  * Update Readme
+  * [debian] remove non-relevent build depeneds
+  * handle visibility better
+  * It's wvkbd
+  * shipping wvkbd from the package itself
+  * update wvkbd binary
+
+  [ WHO53 ]
+  * Update download link in README.md
+
+  [ WHO53 ]
+  * Update wvkbd binary
+  * .gitignore
+  * README
+  * Hide when Hardware Keyboard is Attached and vice-versa
+  * Add LICENSE
+  * hide/show kbd based on screen-keyboard-enabled GSetting
+
+ -- Deepak Kumar <notwho53@gmail.com>  Tue, 17 Sep 2024 16:02:14 +0530
