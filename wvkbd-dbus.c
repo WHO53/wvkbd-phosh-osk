@@ -401,6 +401,7 @@ static void toggle_input_method_listener() {
                 if (input_method) {
                     zwp_input_method_v2_add_listener(input_method, &input_method_listener, NULL);
                     input_method_active = TRUE;
+                    init_input_method_listener();
                     log("Input method listener started\n");
                 } else {
                     log("Failed to create Input method object\n");
@@ -414,7 +415,7 @@ static void toggle_input_method_listener() {
                 input_method = NULL;
             }
             input_method_active = FALSE;
-            set_osk_visibility(FALSE);
+            send_signal_to_wvkbd(FALSE);
             log("Input method listener paused\n");
         }
     }
